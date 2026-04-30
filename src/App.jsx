@@ -10,6 +10,9 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 
+// --- Google AI SDK Resmi ---
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 // =========================================================================
 // 1. KUNCI RAHASIA FIREBASE ANDA
 // =========================================================================
@@ -25,7 +28,7 @@ const firebaseConfig = {
 // =========================================================================
 // 2. API KEY GEMINI ANDA
 // =========================================================================
-const apiKey = "AIzaSyBaP2HUKvmpp-8YbqujhvSUKRBrCzJspdc";
+const apiKey = "AIzaSyAcB5P19XM8wCJzvpAlXEhMCeQ2uH2ES2A";
 
 // =========================================================================
 
@@ -148,7 +151,7 @@ function TabTambahProduk({ user }) {
     msg.className = `fixed top-4 right-4 ${bgClass} text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-[9999] animate-bounce`;
     msg.innerHTML = message;
     document.body.appendChild(msg);
-    setTimeout(() => document.body.removeChild(msg), 4000);
+    setTimeout(() => document.body.removeChild(msg), 5000);
   };
 
   const handlePaste = async () => {
@@ -270,7 +273,7 @@ function TabTambahProduk({ user }) {
       3. HARGA: Berikan angka harga jual dengan strategi "Harga Psikologis" (margin 15-25%).
       4. ALASAN HARGA: Satu kalimat singkat.
 
-      Balas HANYA dengan format JSON persis seperti ini:
+      PENTING: Balas HANYA dengan format JSON persis seperti ini, tanpa tambahan teks apapun di awal atau akhir:
       {
         "judul_shopee": "...",
         "deskripsi_menarik": "Paragraf Pertama...\\n\\nParagraf Kedua...\\n\\nSpesifikasi:\\n- Bahan: Katun\\n- Ukuran: L",
@@ -279,32 +282,14 @@ function TabTambahProduk({ user }) {
       }
       `;
 
-      const payload = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              judul_shopee: { type: "STRING" },
-              deskripsi_menarik: { type: "STRING" },
-              harga_rekomendasi: { type: "NUMBER" },
-              alasan_harga: { type: "STRING" }
-            }
-          }
-        }
-      };
+      // BENAR-BENAR MENGGUNAKAN SDK RESMI KALI INI!
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const aiText = response.text();
       
-      const textResult = await res.text();
-      const result = JSON.parse(textResult);
-
-      const aiText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (aiText) {
         const cleanText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
         const aiData = JSON.parse(cleanText);
@@ -316,12 +301,13 @@ function TabTambahProduk({ user }) {
           sellPrice: aiData.harga_rekomendasi || prev.sellPrice,
           aiPriceReason: aiData.alasan_harga || ''
         }));
+        showNotification("Berhasil dirapihkan oleh AI!", "success");
       } else {
-        throw new Error("Format balasan AI tidak valid");
+        throw new Error("Format balasan AI tidak sesuai ekspektasi");
       }
     } catch (error) {
       console.error("AI Error:", error);
-      showNotification("Gagal menghubungi AI. Pastikan API Key Gemini benar.");
+      showNotification(`Gagal AI: ${error.message.substring(0, 100)}`);
     } finally {
       setIsAiLoading(false);
     }
